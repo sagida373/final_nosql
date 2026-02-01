@@ -7,11 +7,16 @@ from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, Query, Path, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from fastapi import FastAPI, Depends, Header, HTTPException
 
 from bson.decimal128 import Decimal128
 from bson import ObjectId
 
 from db import airbnb_col
+from fastapi import Header, HTTPException
+
+
+
 
 app = FastAPI(title="Airbnb API", version="1.0.0")
 
@@ -161,19 +166,22 @@ async def search_listings(
     return to_json_safe(docs)
 
 
-# READ: single listing
-@app.get("/api/listings/by-id/{listing_id}") 
-async def get_listing(listing_id: int):
-    doc = await airbnb_col.find_one(
-        {"_id": listing_id},
-        {
-            "name": 1,
-            "price": 1,
-            "room_type": 1,
-            "address": 1,
-            "reviews": {"$slice": 5}
-        }
-    )
+# READ: single listing Тень Аската
+@app.get("/api/listings/by-id/{listing_id}")
+async def get_listing(listing_id: str):
+    query = {"_id": listing_id}
+
+    # если id выглядит как число — пробуем ещё и int
+    if listing_id.isdigit():
+        doc = await airbnb_col.find_one({"_id": int(listing_id)}, {
+            "name": 1, "price": 1, "room_type": 1, "address": 1, "reviews": {"$slice": 5}
+        })
+        if doc:
+            return to_json_safe(doc)
+
+    doc = await airbnb_col.find_one(query, {
+        "name": 1, "price": 1, "room_type": 1, "address": 1, "reviews": {"$slice": 5}
+    })
 
     if not doc:
         raise HTTPException(status_code=404, detail="Listing not found")
@@ -190,10 +198,12 @@ class ReviewCreate(BaseModel):
     verified: bool = True
     date: Optional[datetime] = None
 
-
+#добавил обновлять рейтинг
 class ReviewUpdate(BaseModel):
     comments: Optional[str] = None
     verified: Optional[bool] = None
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
+
 
 
 # CREATE review: $push
@@ -220,30 +230,32 @@ async def add_review(listing_id: str, body: ReviewCreate):
     return {"message": "Review added", "modified": res.modified_count}
 
 
-# UPDATE review
+# UPDATE review Здесь Аскат
 @app.patch("/api/listings/{listing_id}/reviews/{review_id}")
 async def update_review(listing_id: str, review_id: str, body: ReviewUpdate):
-    set_fields = {}
+    update = {}
     if body.comments is not None:
-        set_fields["reviews.$.comments"] = body.comments
+        update["reviews.$.comments"] = body.comments
     if body.verified is not None:
-        set_fields["reviews.$.verified"] = body.verified
+        update["reviews.$.verified"] = body.verified
+    if body.rating is not None:
+        update["reviews.$.rating"] = body.rating
 
-    if not set_fields:
-        raise HTTPException(status_code=400, detail="Nothing to update")
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields to update")
 
     res = await airbnb_col.update_one(
         {"_id": listing_id, "reviews._id": review_id},
-        {"$set": set_fields}
+        {"$set": update}
     )
 
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Listing or review not found")
 
-    return {"message": "Review updated", "modified": res.modified_count}
+    return {"message": "Review updated", "listing_id": listing_id, "review_id": review_id}
 
 
-# DELETE
+# DELETE Тута?
 @app.delete("/api/listings/{listing_id}/reviews/{review_id}")
 async def delete_review(listing_id: str, review_id: str):
     res = await airbnb_col.update_one(
@@ -298,8 +310,13 @@ class ReviewStatsOut(BaseModel):
     max_rating: Optional[int] = None
     rating_distribution: Dict[int, int]
 
+#Askat
 
-@app.get("/api/listings/{listing_id}/reviews", response_model=List[ReviewOut])
+from typing import List, Optional
+from fastapi import Query, HTTPException
+from datetime import datetime, date
+
+@app.get("/api/listings/{listing_id}/reviews")
 async def get_listing_reviews(
     listing_id: str,
     min_rating: Optional[int] = Query(default=None, ge=1, le=5),
@@ -325,7 +342,7 @@ async def get_listing_reviews(
 
     reviews = sorted(reviews, key=safe_date, reverse=newest_first)
 
-    # фильтр по rating (если rating отсутствует — такие отзывы просто пропускаем при фильтрации)
+    # фильтр по rating (если rating отсутствует — такие отзывы пропускаем при фильтрации)
     if min_rating is not None or max_rating is not None:
         filtered = []
         for r in reviews:
@@ -339,7 +356,19 @@ async def get_listing_reviews(
             filtered.append(r)
         reviews = filtered
 
-    return to_json_safe(reviews[skip: skip + limit])
+    page = reviews[skip: skip + limit]
+
+    # Добавляем review_id, чтобы фронт мог PATCH/DELETE /reviews/{review_id}
+    out = []
+    for r in page:
+        rr = dict(r)
+        if "_id" in rr:
+            rr["review_id"] = str(rr["_id"])
+            rr.pop("_id", None)  # чтобы _id не потерялся/не скрывался Pydantic-ом
+        out.append(rr)
+
+    return to_json_safe(out)
+
 
 
 @app.get("/api/listings/{listing_id}/reviews/stats", response_model=ReviewStatsOut)
