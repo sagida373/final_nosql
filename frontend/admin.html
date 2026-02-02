@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Airbnb • Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg bg-white border-bottom">
+  <div class="container">
+    <a class="navbar-brand" href="index.html">Airbnb</a>
+    <div class="navbar-nav">
+      <a class="nav-link" href="index.html">Listings</a>
+      <a class="nav-link" href="search.html">Search</a>
+      <a class="nav-link" href="availability.html">Availability</a>
+      <a class="nav-link" href="host.html">Host</a>
+      <a class="nav-link" href="reviews.html">Reviews</a>
+      <a class="nav-link active" href="admin.html">Admin</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h1 class="h4 mb-1">Admin Panel</h1>
+      <div class="text-muted small">Manage hosts and listings (amenities, availability).</div>
+    </div>
+    <span class="badge text-bg-secondary">Restricted</span>
+  </div>
+
+  
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <label class="form-label">Admin token (X-Admin-Token)</label>
+      <input id="token" class="form-control" placeholder="dev-admin-token">
+      <div class="small text-muted mt-1">Token must match ADMIN_TOKEN in backend.</div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- HOST -->
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-3">Host</h2>
+
+          <label class="form-label">Host ID</label>
+          <input id="host_id" class="form-control mb-3" placeholder="e.g. 12345">
+
+          <div class="border rounded-3 p-3 mb-3 bg-light">
+            <div class="small text-muted mb-2">Update host fields (fill only what you want to change)</div>
+            <input id="host_name" class="form-control mb-2" placeholder="Host name">
+            <input id="host_location" class="form-control mb-2" placeholder="Host location">
+            <select id="host_super" class="form-select mb-2">
+              <option value="">Superhost (no change)</option>
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+            <button class="btn btn-primary w-100" onclick="updateHost()">Update host</button>
+          </div>
+
+          <div class="border rounded-3 p-3 bg-light">
+            <div class="small text-muted mb-2">Delete host fields (comma separated)</div>
+            <input id="host_del_fields" class="form-control mb-2" placeholder="host_about, phone, custom_note">
+            <button class="btn btn-outline-danger w-100" onclick="deleteHostFields()">Delete selected fields</button>
+          </div>
+
+          <div id="hostMsg" class="small text-muted mt-3"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AMENITIES -->
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-3">Amenities</h2>
+
+          <label class="form-label">Listing ID</label>
+          <input id="amen_listing" class="form-control mb-3" placeholder="e.g. 10000073">
+
+          <label class="form-label">Amenities (comma separated)</label>
+          <input id="amen_list" class="form-control mb-3" placeholder="Wifi, Kitchen, TV">
+
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-success" onclick="addAmenities()">Add</button>
+            <button class="btn btn-warning" onclick="replaceAmenities()">Replace all</button>
+            <button class="btn btn-outline-danger" onclick="removeAmenity()">Remove first item</button>
+          </div>
+
+          <div class="small text-muted mt-2">Tip: “Remove first item” removes the first amenity from the input field.</div>
+          <div id="amenMsg" class="small text-muted mt-3"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AVAILABILITY -->
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h6 mb-3">Availability</h2>
+
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label">Listing ID</label>
+              <input id="avail_listing" class="form-control" placeholder="e.g. 10000073">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">30 days</label>
+              <input id="a30" class="form-control" placeholder="10">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">60 days</label>
+              <input id="a60" class="form-control" placeholder="20">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">90 days</label>
+              <input id="a90" class="form-control" placeholder="30">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">365 days</label>
+              <input id="a365" class="form-control" placeholder="200">
+            </div>
+            <div class="col-12 mt-2">
+              <button class="btn btn-primary" onclick="updateAvailability()">Update availability</button>
+              <span class="small text-muted ms-2">Fill only the fields you want to change.</span>
+            </div>
+          </div>
+
+          <hr class="my-4"/>
+
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <div class="border rounded-3 p-3 bg-light h-100">
+                <div class="small text-muted mb-2">Add / update extra fields (JSON)</div>
+                <textarea id="avail_extra" class="form-control mb-2" rows="3" placeholder='{"custom_note":"hello","last_updated_by":"admin"}'></textarea>
+                <button class="btn btn-outline-primary w-100" onclick="addAvailabilityExtra()">Save extra fields</button>
+                <div class="small text-muted mt-2">Example keys: custom_note, last_updated_by</div>
+              </div>
+            </div>
+
+            <div class="col-lg-6">
+              <div class="border rounded-3 p-3 bg-light h-100">
+                <div class="small text-muted mb-2">Delete extra fields (comma separated)</div>
+                <input id="avail_del_fields" class="form-control mb-2" placeholder="custom_note, last_updated_by">
+                <button class="btn btn-outline-danger w-100" onclick="deleteAvailabilityFields()">Delete extra fields</button>
+                <div class="small text-muted mt-2">Deletes fields inside availability.*</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="availMsg" class="small text-muted mt-3"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "http://127.0.0.1:8000";
+
+function tokenValue() {
+  return document.getElementById("token").value.trim();
+}
+
+function headers(hasBody) {
+  const h = { "X-Admin-Token": tokenValue() };
+  if (hasBody) h["Content-Type"] = "application/json";
+  return h;
+}
+
+function show(el, text, ok=true) {
+  el.className = "small mt-3 " + (ok ? "text-success" : "text-danger");
+  el.textContent = text;
+}
+
+async function callApi(url, method, body) {
+  const res = await fetch(url, {
+    method,
+    headers: headers(body != null),
+    body: body != null ? JSON.stringify(body) : null
+  });
+  const txt = await res.text();
+  if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
+  return txt;
+}
+
+/* token persistence */
+function saveToken() {
+  localStorage.setItem("adminToken", tokenValue());
+  document.getElementById("tokMsg").textContent = "Saved ✅";
+}
+function clearToken() {
+  localStorage.removeItem("adminToken");
+  document.getElementById("token").value = "";
+  document.getElementById("tokMsg").textContent = "Cleared.";
+}
+document.getElementById("token").value = localStorage.getItem("adminToken") || "";
+document.getElementById("tokMsg").textContent = document.getElementById("token").value ? "Loaded from browser storage." : "";
+
+/* HOST */
+async function updateHost() {
+  const hostMsg = document.getElementById("hostMsg");
+  try {
+    const hostId = document.getElementById("host_id").value.trim();
+    const body = {};
+    const name = document.getElementById("host_name").value.trim();
+    const loc = document.getElementById("host_location").value.trim();
+    const sup = document.getElementById("host_super").value;
+
+    if (name) body.host_name = name;
+    if (loc) body.host_location = loc;
+    if (sup !== "") body.host_is_superhost = (sup === "true");
+
+    if (!hostId) throw new Error("Host ID is required");
+    if (Object.keys(body).length === 0) throw new Error("Nothing to update");
+
+    await callApi(`${API}/api/admin/hosts/${encodeURIComponent(hostId)}`, "PATCH", body);
+    show(hostMsg, "Host updated ✅", true);
+  } catch (e) {
+    show(hostMsg, "Error: " + e.message, false);
+  }
+}
+
+async function deleteHostFields() {
+  const hostMsg = document.getElementById("hostMsg");
+  try {
+    const hostId = document.getElementById("host_id").value.trim();
+    const raw = document.getElementById("host_del_fields").value;
+    const fields = raw.split(",").map(x => x.trim()).filter(Boolean);
+
+    if (!hostId) throw new Error("Host ID is required");
+    if (fields.length === 0) throw new Error("Enter fields to delete");
+
+    await callApi(`${API}/api/admin/hosts/${encodeURIComponent(hostId)}/fields`, "DELETE", { fields });
+    show(hostMsg, "Fields deleted ✅", true);
+  } catch (e) {
+    show(hostMsg, "Error: " + e.message, false);
+  }
+}
+
+/* AMENITIES */
+async function addAmenities() {
+  const amenMsg = document.getElementById("amenMsg");
+  try {
+    const listingId = document.getElementById("amen_listing").value.trim();
+    const list = document.getElementById("amen_list").value.split(",").map(x => x.trim()).filter(Boolean);
+
+    if (!listingId) throw new Error("Listing ID is required");
+    if (list.length === 0) throw new Error("Enter amenities");
+
+    await callApi(`${API}/api/admin/listings/${encodeURIComponent(listingId)}/amenities`, "POST", { amenities: list });
+    show(amenMsg, "Amenities added ✅", true);
+  } catch (e) {
+    show(amenMsg, "Error: " + e.message, false);
+  }
+}
+
+async function replaceAmenities() {
+  const amenMsg = document.getElementById("amenMsg");
+  try {
+    const listingId = document.getElementById("amen_listing").value.trim();
+    const list = document.getElementById("amen_list").value.split(",").map(x => x.trim()).filter(Boolean);
+
+    if (!listingId) throw new Error("Listing ID is required");
+    if (list.length === 0) throw new Error("Enter amenities");
+
+    await callApi(`${API}/api/admin/listings/${encodeURIComponent(listingId)}/amenities`, "PATCH", { amenities: list });
+    show(amenMsg, "Amenities replaced ✅", true);
+  } catch (e) {
+    show(amenMsg, "Error: " + e.message, false);
+  }
+}
+
+async function removeAmenity() {
+  const amenMsg = document.getElementById("amenMsg");
+  try {
+    const listingId = document.getElementById("amen_listing").value.trim();
+    const first = document.getElementById("amen_list").value.split(",")[0].trim();
+
+    if (!listingId) throw new Error("Listing ID is required");
+    if (!first) throw new Error("Enter at least one amenity");
+
+    await callApi(`${API}/api/admin/listings/${encodeURIComponent(listingId)}/amenities/${encodeURIComponent(first)}`, "DELETE", null);
+    show(amenMsg, "Amenity removed ✅", true);
+  } catch (e) {
+    show(amenMsg, "Error: " + e.message, false);
+  }
+}
+
+/* AVAILABILITY */
+async function updateAvailability() {
+  const availMsg = document.getElementById("availMsg");
+  try {
+    const listingId = document.getElementById("avail_listing").value.trim();
+    if (!listingId) throw new Error("Listing ID is required");
+
+    const body = {};
+    const v30 = document.getElementById("a30").value.trim();
+    const v60 = document.getElementById("a60").value.trim();
+    const v90 = document.getElementById("a90").value.trim();
+    const v365 = document.getElementById("a365").value.trim();
+
+    if (v30 !== "") body.availability_30 = Number(v30);
+    if (v60 !== "") body.availability_60 = Number(v60);
+    if (v90 !== "") body.availability_90 = Number(v90);
+    if (v365 !== "") body.availability_365 = Number(v365);
+
+    if (Object.keys(body).length === 0) throw new Error("Nothing to update");
+
+    await callApi(`${API}/api/admin/listings/${encodeURIComponent(listingId)}/availability`, "PATCH", body);
+    show(availMsg, "Availability updated ✅", true);
+  } catch (e) {
+    show(availMsg, "Error: " + e.message, false);
+  }
+}
+
+async function addAvailabilityExtra() {
+  const availMsg = document.getElementById("availMsg");
+  try {
+    const listingId = document.getElementById("avail_listing").value.trim();
+    if (!listingId) throw new Error("Listing ID is required");
+
+    const txt = document.getElementById("avail_extra").value.trim();
+    if (!txt) throw new Error("Enter JSON object");
+
+    let obj;
+    try { obj = JSON.parse(txt); }
+    catch { throw new Error("Invalid JSON"); }
+
+    await callApi(`${API}/api/admin/listings/${encodeURIComponent(listingId)}/availability/extra`, "PATCH", { extra: obj });
+    show(availMsg, "Extra fields saved ✅", true);
+  } catch (e) {
+    show(availMsg, "Error: " + e.message, false);
+  }
+}
+
+async function deleteAvailabilityFields() {
+  const availMsg = document.getElementById("availMsg");
+  try {
+    const listingId = document.getElementById("avail_listing").value.trim();
+    if (!listingId) throw new Error("Listing ID is required");
+
+    const raw = document.getElementById("avail_del_fields").value;
+    const fields = raw.split(",").map(x => x.trim()).filter(Boolean);
+    if (fields.length === 0) throw new Error("Enter fields to delete");
+
+    await callApi(`${API}/api/admin/listings/${encodeURIComponent(listingId)}/availability/fields`, "DELETE", { fields });
+    show(availMsg, "Extra fields deleted ✅", true);
+  } catch (e) {
+    show(availMsg, "Error: " + e.message, false);
+  }
+}
+</script>
+
+</body>
+</html>

@@ -16,6 +16,7 @@
       <a class="nav-link" href="availability.html">Availability</a>
       <a class="nav-link" href="host.html">Host</a>
       <a class="nav-link active" href="reviews.html">Reviews</a>
+      <a class="nav-link" href="admin.html">Admin</a>
     </div>
   </div>
 </nav>
@@ -44,6 +45,7 @@
   <div id="status" class="text-muted mb-3"></div>
 
   <div class="row g-3">
+    <!-- STATS -->
     <div class="col-lg-6">
       <div class="card shadow-sm">
         <div class="card-body">
@@ -53,6 +55,7 @@
       </div>
     </div>
 
+    <!-- ADD REVIEW -->
     <div class="col-lg-6">
       <div class="card shadow-sm">
         <div class="card-body">
@@ -60,18 +63,18 @@
           <div class="row g-2">
             <div class="col-md-6">
               <label class="form-label">review_id</label>
-              <input id="new_review_id" class="form-control" placeholder="my_review_001">
+              <input id="new_review_id" class="form-control">
             </div>
             <div class="col-md-6">
               <label class="form-label">reviewer_id</label>
-              <input id="new_reviewer_id" class="form-control" placeholder="123">
+              <input id="new_reviewer_id" class="form-control">
             </div>
             <div class="col-md-6">
               <label class="form-label">reviewer_name</label>
-              <input id="new_reviewer_name" class="form-control" placeholder="Alex">
+              <input id="new_reviewer_name" class="form-control">
             </div>
             <div class="col-md-6">
-              <label class="form-label">rating (1-5, optional)</label>
+              <label class="form-label">rating (1–5)</label>
               <input id="new_rating" class="form-control" type="number" min="1" max="5">
             </div>
             <div class="col-12">
@@ -87,10 +90,17 @@
       </div>
     </div>
 
+    <!-- REVIEWS LIST -->
     <div class="col-12">
       <div class="card shadow-sm">
         <div class="card-body">
           <h2 class="h6">Reviews list</h2>
+
+          <div class="col-md-4 mb-3">
+            <label class="form-label">Admin token</label>
+            <input id="admin_token" class="form-control" placeholder="dev-admin-token">
+          </div>
+
           <div class="table-responsive">
             <table class="table table-sm align-middle">
               <thead>
@@ -115,6 +125,13 @@
 <script>
 const API = "http://127.0.0.1:8000";
 
+function adminHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "X-Admin-Token": document.getElementById("admin_token").value.trim()
+  };
+}
+
 async function fetchJSON(url, opts) {
   const res = await fetch(url, opts);
   const text = await res.text();
@@ -131,6 +148,7 @@ async function loadReviews() {
   const limit = document.getElementById("limit").value || 20;
   const rows = document.getElementById("rows");
   const status = document.getElementById("status");
+  const statsBox = document.getElementById("stats");
 
   if (!listingId) {
     status.textContent = "Enter listing_id";
@@ -139,7 +157,9 @@ async function loadReviews() {
 
   status.textContent = "Loading...";
   rows.innerHTML = "";
+  statsBox.textContent = "Loading stats...";
 
+  /* REVIEWS */
   const reviews = await fetchJSON(
     `${API}/api/listings/${encodeURIComponent(listingId)}/reviews?limit=${limit}`
   );
@@ -165,6 +185,31 @@ async function loadReviews() {
       </tr>`;
   }).join("");
 
+  /* STATS */
+  try {
+    const stats = await fetchJSON(
+      `${API}/api/listings/${encodeURIComponent(listingId)}/reviews/stats`
+    );
+
+    const d = stats.rating_distribution || {};
+
+    statsBox.innerHTML = `
+      <div><b>Total ratings:</b> ${stats.count}</div>
+      <div><b>Average:</b> ${stats.average_rating ?? "-"}</div>
+      <div><b>Min:</b> ${stats.min_rating ?? "-"}</div>
+      <div><b>Max:</b> ${stats.max_rating ?? "-"}</div>
+      <div class="mt-2 small">
+        1: ${d[1] ?? 0},
+        2: ${d[2] ?? 0},
+        3: ${d[3] ?? 0},
+        4: ${d[4] ?? 0},
+        5: ${d[5] ?? 0}
+      </div>
+    `;
+  } catch (e) {
+    statsBox.textContent = "No stats available";
+  }
+
   status.textContent = `Loaded: ${reviews.length}`;
 }
 
@@ -173,22 +218,24 @@ async function doAdd() {
   const msg = document.getElementById("addMsg");
 
   const body = {
-    reviewer_id: document.getElementById("new_reviewer_id").value,
-    reviewer_name: document.getElementById("new_reviewer_name").value,
-    comments: document.getElementById("new_comments").value,
+    reviewer_id: new_reviewer_id.value,
+    reviewer_name: new_reviewer_name.value,
+    comments: new_comments.value,
     verified: true
   };
 
-  const rating = document.getElementById("new_rating").value;
-  if (rating) body.rating = Number(rating);
+  if (new_rating.value) body.rating = Number(new_rating.value);
 
-  await fetchJSON(`${API}/api/listings/${listingId}/reviews/${document.getElementById("new_review_id").value}`, {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify(body)
-  });
+  await fetchJSON(
+    `${API}/api/listings/${listingId}/reviews/${new_review_id.value}`,
+    {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body)
+    }
+  );
 
-  msg.textContent = "Added";
+  msg.textContent = "Added ✅";
   loadReviews();
 }
 
@@ -197,33 +244,40 @@ async function doPatch(reviewId, btn) {
   const inputs = tr.querySelectorAll("input, select, textarea");
 
   const body = {
-    rating: inputs[0].value ? Number(inputs[0].value) : null,
     verified: inputs[1].value === "true",
     comments: inputs[2].value
   };
+  if (inputs[0].value) body.rating = Number(inputs[0].value);
 
-  await fetchJSON(`${API}/api/listings/${getListingId()}/reviews/${reviewId}`, {
-    method: "PATCH",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify(body)
-  });
+  await fetchJSON(
+    `${API}/api/admin/listings/${getListingId()}/reviews/${reviewId}`,
+    {
+      method: "PATCH",
+      headers: adminHeaders(),
+      body: JSON.stringify(body)
+    }
+  );
 
-  btn.textContent = "Saved";
+  btn.textContent = "Saved ✅";
   setTimeout(() => btn.textContent = "Save", 800);
 }
 
 async function doDelete(reviewId) {
   if (!confirm("Delete this review?")) return;
 
-  await fetchJSON(`${API}/api/listings/${getListingId()}/reviews/${reviewId}`, {
-    method: "DELETE"
-  });
+  await fetchJSON(
+    `${API}/api/admin/listings/${getListingId()}/reviews/${reviewId}`,
+    {
+      method: "DELETE",
+      headers: adminHeaders()
+    }
+  );
 
   loadReviews();
 }
 
-document.getElementById("btnLoad").onclick = loadReviews;
-document.getElementById("btnAdd").onclick = doAdd;
+btnLoad.onclick = loadReviews;
+btnAdd.onclick = doAdd;
 </script>
 </body>
 </html>
