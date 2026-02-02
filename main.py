@@ -22,7 +22,7 @@ app = FastAPI(title="Airbnb API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # для учебного проекта ок
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,7 +41,7 @@ def to_json_safe(x):
     if isinstance(x, Decimal128):
         return float(x.to_decimal())
 
-    # ObjectId -> str (на всякий случай)
+    # ObjectId -> str 
     if isinstance(x, ObjectId):
         return str(x)
 
@@ -82,7 +82,7 @@ async def get_listings(limit: int = 10):
     return to_json_safe(listings)
 
 
-#эндпоинт поиска /api/listings/search с фильтрами и сортировко
+#ENDPOINTS LISTINGS 
 @app.get("/api/listings/search")
 async def search_listings(
     city: Optional[str] = None,
@@ -129,7 +129,7 @@ async def search_listings(
     if min_rating is not None:
         q["review_scores.review_scores_rating"] = {"$gte": min_rating}
 
-    # ✅ ADD: amenities filter
+    #amenities filter
     if amenities:
         cleaned = [a.strip() for a in amenities if a and a.strip()]
         if cleaned:
@@ -177,7 +177,6 @@ async def search_listings(
 async def get_listing(listing_id: str):
     query = {"_id": listing_id}
 
-    # если id выглядит как число — пробуем ещё и int
     if listing_id.isdigit():
         doc = await airbnb_col.find_one({"_id": int(listing_id)}, {
             "name": 1, "price": 1, "room_type": 1, "address": 1, "reviews": {"$slice": 5}
@@ -204,7 +203,6 @@ class ReviewCreate(BaseModel):
     verified: bool = True
     date: Optional[datetime] = None
 
-#добавил обновлять рейтинг
 class ReviewUpdate(BaseModel):
     comments: Optional[str] = None
     verified: Optional[bool] = None
@@ -478,17 +476,17 @@ async def create_review_with_id(listing_id: str, review_id: str, body: ReviewCre
     if body.rating is not None:
         review_doc["rating"] = body.rating
 
-    # 1) проверяем что listing существует
+    # 1) cheks if listings exists
     listing = await airbnb_col.find_one({"_id": listing_id}, {"_id": 1})
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    # 2) запрещаем дубликаты review_id в одном listing
+    # 2) prohibiting duplicate review_ids in the same listing
     dup = await airbnb_col.find_one({"_id": listing_id, "reviews._id": review_id}, {"_id": 1})
     if dup:
         raise HTTPException(status_code=409, detail="Review with this id already exists in this listing")
 
-    # 3) пушим
+    # 3) push
     res = await airbnb_col.update_one(
         {"_id": listing_id},
         {"$push": {"reviews": review_doc}}
@@ -529,7 +527,7 @@ async def patch_review(listing_id: str, review_id: str, body: ReviewPatch2):
 
 
 
-#сводка по хосту
+#HOST
 from fastapi import HTTPException, Query
 from typing import Optional, List, Dict
 
@@ -566,10 +564,6 @@ async def get_host_summary(host_id: str):
     return to_json_safe(doc["host"])
 
 
-
-
-
-#объявления хоста
 @app.get("/api/hosts/{host_id}/listings")
 async def get_host_listings(
     host_id: str,
@@ -606,12 +600,12 @@ async def get_host_listings(
     docs = await cursor.to_list(length=limit)
 
     if skip == 0 and not docs:
-        # если ничего не нашли — скорее всего host_id не существует
+        # if hasn't found anything, most likely the host_id doesn't exist
         raise HTTPException(status_code=404, detail="Host not found or no listings")
 
     return to_json_safe(docs)
 
-#поиск через availability
+#search availability
 @app.get("/api/amenities")
 async def get_amenities():
     """
@@ -647,7 +641,7 @@ async def get_listings_by_availability(
     limit: int = Query(default=20, ge=1, le=100),
     skip: int = Query(default=0, ge=0),
 ):
-    # 1) фильтр
+    # 1) filter
     q = {}
     if min_30 is not None:
         q["availability.availability_30"] = {"$gte": min_30}
@@ -658,7 +652,6 @@ async def get_listings_by_availability(
     if min_365 is not None:
         q["availability.availability_365"] = {"$gte": min_365}
 
-    # 2) какие поля вернуть
     projection = {
         "_id": 1,
         "name": 1,
@@ -673,7 +666,6 @@ async def get_listings_by_availability(
         "availability": 1,
     }
 
-    # 3) запрос к Mongo
     cursor = (
         airbnb_col
         .find(q, projection)
