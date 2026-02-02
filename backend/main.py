@@ -41,7 +41,7 @@ def to_json_safe(x):
     if isinstance(x, Decimal128):
         return float(x.to_decimal())
 
-    # ObjectId -> str 
+    # ObjectId -> str (на всякий случай)
     if isinstance(x, ObjectId):
         return str(x)
 
@@ -82,7 +82,7 @@ async def get_listings(limit: int = 10):
     return to_json_safe(listings)
 
 
-#ENDPOINTS LISTINGS 
+#endpoint for searching with sort
 @app.get("/api/listings/search")
 async def search_listings(
     city: Optional[str] = None,
@@ -129,7 +129,7 @@ async def search_listings(
     if min_rating is not None:
         q["review_scores.review_scores_rating"] = {"$gte": min_rating}
 
-    #amenities filter
+    # amenities filter
     if amenities:
         cleaned = [a.strip() for a in amenities if a and a.strip()]
         if cleaned:
@@ -316,14 +316,6 @@ async def admin_delete_review(
 
 
 #HOST ENDPOINTS
-
-#HOST ENDPOINTS (и дальше: дополнительные endpoints по reviews)
-
-# ВАЖНО:
-# 1) НЕ создаём app второй раз
-# 2) Используем MongoDB (airbnb_col)
-# 3) Никаких _get_listing_reviews
-
 class ReviewOut(BaseModel):
     _id: str
     listing_id: Optional[str] = None
@@ -332,7 +324,7 @@ class ReviewOut(BaseModel):
     comments: Optional[str] = None
     verified: Optional[bool] = True
     date: Optional[datetime] = None
-    rating: Optional[int] = Field(default=None, ge=1, le=5)  # если у тебя в датасете есть rating
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
 
 
 class ReviewStatsOut(BaseModel):
@@ -358,24 +350,18 @@ async def get_listing_reviews(
     skip: int = Query(default=0, ge=0),
     newest_first: bool = True
 ):
-    """
-    Возвращает отзывы конкретного listing из поля reviews внутри документа.
-    Поддерживает фильтр по rating (если он есть) + пагинацию.
-    """
     doc = await airbnb_col.find_one({"_id": listing_id}, {"reviews": 1})
     if not doc or "reviews" not in doc:
         raise HTTPException(status_code=404, detail="Listing not found or no reviews")
 
     reviews = doc.get("reviews", [])
 
-    # сортировка по date
     def safe_date(r):
         d = r.get("date")
         return d if isinstance(d, (datetime, date)) else datetime.min
 
     reviews = sorted(reviews, key=safe_date, reverse=newest_first)
 
-    # фильтр по rating (если rating отсутствует — такие отзывы пропускаем при фильтрации)
     if min_rating is not None or max_rating is not None:
         filtered = []
         for r in reviews:
@@ -391,13 +377,12 @@ async def get_listing_reviews(
 
     page = reviews[skip: skip + limit]
 
-    # Добавляем review_id, чтобы фронт мог PATCH/DELETE /reviews/{review_id}
     out = []
     for r in page:
         rr = dict(r)
         if "_id" in rr:
             rr["review_id"] = str(rr["_id"])
-            rr.pop("_id", None)  # чтобы _id не потерялся/не скрывался Pydantic-ом
+            rr.pop("_id", None)
         out.append(rr)
 
     return to_json_safe(out)
@@ -406,14 +391,7 @@ async def get_listing_reviews(
 
 @app.get("/api/listings/{listing_id}/reviews/stats", response_model=ReviewStatsOut)
 async def get_listing_reviews_stats(listing_id: str):
-    """
-    Статистика по отзывам:
-    - count
-    - average/min/max rating
-    - distribution 1..5
 
-    ВАЖНО: статистика считается только по тем отзывам, где есть поле rating.
-    """
     doc = await airbnb_col.find_one({"_id": listing_id}, {"reviews": 1})
     if not doc or "reviews" not in doc:
         raise HTTPException(status_code=404, detail="Listing not found or no reviews")
@@ -476,12 +454,12 @@ async def create_review_with_id(listing_id: str, review_id: str, body: ReviewCre
     if body.rating is not None:
         review_doc["rating"] = body.rating
 
-    # 1) cheks if listings exists
+    # 1) checks if listing exists
     listing = await airbnb_col.find_one({"_id": listing_id}, {"_id": 1})
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    # 2) prohibiting duplicate review_ids in the same listing
+    # 2) forbid duplicates review_id in one listing
     dup = await airbnb_col.find_one({"_id": listing_id, "reviews._id": review_id}, {"_id": 1})
     if dup:
         raise HTTPException(status_code=409, detail="Review with this id already exists in this listing")
@@ -526,8 +504,6 @@ async def patch_review(listing_id: str, review_id: str, body: ReviewPatch2):
 
 
 
-
-#HOST
 from fastapi import HTTPException, Query
 from typing import Optional, List, Dict
 
@@ -600,7 +576,6 @@ async def get_host_listings(
     docs = await cursor.to_list(length=limit)
 
     if skip == 0 and not docs:
-        # if hasn't found anything, most likely the host_id doesn't exist
         raise HTTPException(status_code=404, detail="Host not found or no listings")
 
     return to_json_safe(docs)
@@ -641,7 +616,6 @@ async def get_listings_by_availability(
     limit: int = Query(default=20, ge=1, le=100),
     skip: int = Query(default=0, ge=0),
 ):
-    # 1) filter
     q = {}
     if min_30 is not None:
         q["availability.availability_30"] = {"$gte": min_30}
