@@ -16,6 +16,7 @@
       <a class="nav-link" href="availability.html">Availability</a>
       <a class="nav-link" href="host.html">Host</a>
       <a class="nav-link" href="reviews.html">Reviews</a>
+      <a class="nav-link" href="admin.html">Admin</a>
     </div>
   </div>
 </nav>
@@ -79,6 +80,23 @@
           <input id="limit" type="number" class="form-control" value="12" min="1">
         </div>
 
+        
+        <div class="col-12 mt-2">
+          <div class="d-flex align-items-center justify-content-between">
+            <label class="form-label mb-1">Amenities</label>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="btnAmenAll">Select all</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="btnAmenNone">Clear</button>
+            </div>
+          </div>
+
+          <input id="amenFilter" class="form-control form-control-sm mb-2" placeholder="Filter amenities (e.g. Wifi)">
+          <div id="amenitiesBox" class="border rounded-3 p-2 bg-light" style="max-height:180px; overflow:auto;">
+            <div class="text-muted small">Loading amenities...</div>
+          </div>
+          <div class="text-muted small mt-1">Selected: <span id="amenSelected">0</span></div>
+        </div>
+
         <div class="col-12 d-flex gap-2 mt-2">
           <button id="btnSearch" class="btn btn-primary">Search</button>
           <button id="btnClear" class="btn btn-outline-secondary">Clear</button>
@@ -88,7 +106,6 @@
     </div>
   </div>
 
-  
   <div id="byIdResult" class="mb-3"></div>
 
   <div id="status" class="text-muted mb-3"></div>
@@ -105,6 +122,72 @@ async function fetchJSON(url) {
   return text ? JSON.parse(text) : null;
 }
 
+/*  Amenities  */
+async function loadAmenities() {
+  const box = document.getElementById("amenitiesBox");
+  const sel = document.getElementById("amenSelected");
+  box.innerHTML = `<div class="text-muted small">Loading amenities...</div>`;
+
+  try {
+    const data = await fetchJSON(`${API}/api/amenities`);
+    const list = Array.isArray(data.amenities) ? data.amenities : [];
+
+    box.innerHTML = list.map(a => `
+      <label class="form-check form-check-inline me-3 mb-1">
+        <input class="form-check-input amenity" type="checkbox" value="${escapeHtml(a)}">
+        <span class="form-check-label">${escapeHtml(a)}</span>
+      </label>
+    `).join("");
+
+    // update counter on change
+    box.querySelectorAll(".amenity").forEach(cb => {
+      cb.addEventListener("change", () => sel.textContent = countSelectedAmenities());
+    });
+
+    sel.textContent = countSelectedAmenities();
+  } catch (e) {
+    console.error(e);
+    box.innerHTML = `<div class="text-danger small">Failed to load amenities</div>`;
+  }
+}
+
+function countSelectedAmenities() {
+  return document.querySelectorAll(".amenity:checked").length;
+}
+
+function getSelectedAmenities() {
+  return [...document.querySelectorAll(".amenity:checked")].map(cb => cb.value);
+}
+
+function applyAmenityFilter() {
+  const q = document.getElementById("amenFilter").value.trim().toLowerCase();
+  const labels = document.querySelectorAll("#amenitiesBox label.form-check");
+  labels.forEach(lb => {
+    const text = lb.textContent.trim().toLowerCase();
+    lb.style.display = (!q || text.includes(q)) ? "" : "none";
+  });
+}
+
+function selectAllAmenities() {
+  document.querySelectorAll(".amenity").forEach(cb => cb.checked = true);
+  document.getElementById("amenSelected").textContent = countSelectedAmenities();
+}
+
+function clearAmenities() {
+  document.querySelectorAll(".amenity").forEach(cb => cb.checked = false);
+  document.getElementById("amenSelected").textContent = 0;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+/* Find by ID */
 async function findById() {
   const id = document.getElementById("listing_id").value.trim();
   const box = document.getElementById("byIdResult");
@@ -114,7 +197,7 @@ async function findById() {
     return;
   }
 
-  box.innerHTML = `<div class="text-muted">Searching via <code>/api/listings/by-id/${id}</code> ...</div>`;
+  box.innerHTML = `<div class="text-muted">Searching... </div>`;
 
   try {
     const doc = await fetchJSON(`${API}/api/listings/by-id/${encodeURIComponent(id)}`);
@@ -137,6 +220,7 @@ async function findById() {
   }
 }
 
+/*  Search*/
 function buildQuery() {
   const p = new URLSearchParams();
   const fields = ["market","country","room_type","property_type","min_price","max_price","min_rating","sort","limit"];
@@ -144,6 +228,11 @@ function buildQuery() {
     const v = document.getElementById(f).value;
     if (v !== null && String(v).trim() !== "") p.set(f, v);
   }
+
+  // add selected amenities (multi)
+  const amenities = getSelectedAmenities();
+  for (const a of amenities) p.append("amenities", a);
+
   return p.toString();
 }
 
@@ -181,6 +270,7 @@ async function runSearch() {
   }
 }
 
+/* ---------- Events ---------- */
 document.getElementById("btnSearch").addEventListener("click", runSearch);
 
 document.getElementById("btnClear").addEventListener("click", () => {
@@ -193,6 +283,12 @@ document.getElementById("btnClear").addEventListener("click", () => {
     else el.value = "";
   }
   document.getElementById("limit").value = 12;
+
+  // amenities reset
+  document.getElementById("amenFilter").value = "";
+  clearAmenities();
+  applyAmenityFilter();
+
   document.getElementById("status").textContent = "";
   document.getElementById("grid").innerHTML = "";
 });
@@ -201,6 +297,13 @@ document.getElementById("btnById").addEventListener("click", findById);
 document.getElementById("listing_id").addEventListener("keydown", (e) => {
   if (e.key === "Enter") findById();
 });
+
+document.getElementById("amenFilter").addEventListener("input", applyAmenityFilter);
+document.getElementById("btnAmenAll").addEventListener("click", selectAllAmenities);
+document.getElementById("btnAmenNone").addEventListener("click", clearAmenities);
+
+// init
+loadAmenities();
 </script>
 </body>
 </html>

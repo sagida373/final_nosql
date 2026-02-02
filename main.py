@@ -93,6 +93,7 @@ async def search_listings(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     min_rating: Optional[int] = None,
+    amenities: Optional[List[str]] = Query(default=None),  # ✅ ADD
     sort: Optional[str] = None,
     limit: int = 20,
     skip: int = 0
@@ -127,6 +128,12 @@ async def search_listings(
 
     if min_rating is not None:
         q["review_scores.review_scores_rating"] = {"$gte": min_rating}
+
+    # ✅ ADD: amenities filter
+    if amenities:
+        cleaned = [a.strip() for a in amenities if a and a.strip()]
+        if cleaned:
+            q["amenities"] = {"$all": cleaned}  # must contain ALL selected amenities
 
     if min_price is not None or max_price is not None:
         expr = []
@@ -165,8 +172,7 @@ async def search_listings(
     docs = await cursor.to_list(length=limit)
     return to_json_safe(docs)
 
-
-# READ: single listing Тень Аската
+# READ: single listing
 @app.get("/api/listings/by-id/{listing_id}")
 async def get_listing(listing_id: str):
     query = {"_id": listing_id}
@@ -231,9 +237,15 @@ async def add_review(listing_id: str, body: ReviewCreate):
 
 
 # UPDATE review Здесь Аскат
-@app.patch("/api/listings/{listing_id}/reviews/{review_id}")
-async def update_review(listing_id: str, review_id: str, body: ReviewUpdate):
+@app.patch("/api/admin/listings/{listing_id}/reviews/{review_id}")
+async def admin_update_review(
+    listing_id: str,
+    review_id: str,
+    body: ReviewUpdate,
+    admin=Depends(require_admin)
+):
     update = {}
+
     if body.comments is not None:
         update["reviews.$.comments"] = body.comments
     if body.verified is not None:
@@ -245,22 +257,45 @@ async def update_review(listing_id: str, review_id: str, body: ReviewUpdate):
         raise HTTPException(status_code=400, detail="No fields to update")
 
     res = await airbnb_col.update_one(
-        {"_id": listing_id, "reviews._id": review_id},
-        {"$set": update}
+        {
+            "_id": listing_id,
+            "reviews._id": review_id
+        },
+        {
+            "$set": update
+        }
     )
 
     if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Listing or review not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Listing or review not found"
+        )
 
-    return {"message": "Review updated", "listing_id": listing_id, "review_id": review_id}
+    return {
+        "message": "Review updated (admin)",
+        "listing_id": listing_id,
+        "review_id": review_id
+    }
 
 
-# DELETE Тута?
-@app.delete("/api/listings/{listing_id}/reviews/{review_id}")
-async def delete_review(listing_id: str, review_id: str):
+# DELETE Тута
+@app.delete("/api/admin/listings/{listing_id}/reviews/{review_id}")
+async def admin_delete_review(
+    listing_id: str,
+    review_id: str,
+    admin=Depends(require_admin)
+):
     res = await airbnb_col.update_one(
-        {"_id": listing_id, "reviews._id": review_id},
-        {"$pull": {"reviews": {"_id": review_id}}}
+        {
+            "_id": listing_id,
+            "reviews._id": review_id
+        },
+        {
+            "$pull": {
+                "reviews": {"_id": review_id}
+            }
+        }
     )
 
     if res.matched_count == 0:
@@ -276,7 +311,7 @@ async def delete_review(listing_id: str, review_id: str):
         )
 
     return {
-        "message": "Review deleted",
+        "message": "Review deleted (admin)",
         "listing_id": listing_id,
         "review_id": review_id
     }
